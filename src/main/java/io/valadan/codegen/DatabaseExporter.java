@@ -37,15 +37,15 @@ public class DatabaseExporter {
 		InputStream is = Thread.currentThread().getContextClassLoader().getResourceAsStream("database.properties");
 		properties.load(is);
 		DatabaseExporter exporter = new DatabaseExporter(properties);
-		exporter.export();
+		exporter.export(null);
 	}
 	
-	public DatabaseCollector export(){
+	public DatabaseCollector export(String schema){
 
 		try {
 			JDBCReader reader = JDBCReaderFactory.newJDBCReader(cfg.getProperties(), buildSettings(), revengStrategy, cfg.getServiceRegistry());
 			DatabaseCollector dbs = new MappingsDatabaseCollector(cfg.createMappings(), reader.getMetaDataDialect());
-		    reader.readDatabaseSchema(dbs, null, "openvbx");		    
+		    reader.readDatabaseSchema(dbs, null, schema);		    
 		    return dbs;		
 		} 
 		finally	{

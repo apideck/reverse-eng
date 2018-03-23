@@ -15,7 +15,7 @@ object EntityGen {
   import com.squareup.javapoet._
   import org.hibernate.annotations.{CacheConcurrencyStrategy, Type}
   import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize}
-  import scala.collection.JavaConversions._
+  import scala.collection.JavaConverters._
   
   import Naming._
   
@@ -30,9 +30,9 @@ object EntityGen {
             .addAnnotation(AnnotationSpec.builder(classOf[Cache])
                 .addMember("usage", "$T.$L", classOf[CacheConcurrencyStrategy], CacheConcurrencyStrategy.NONSTRICT_READ_WRITE)
                 .build())
-            .addFields(fields2FieldSpecs(entity.fields))
-            .addFields(oneToManyFieldSpecs(packageName, entity.oneToManyRel))
-            .addFields(manyToOneFieldSpecs(packageName, entity.manyToOneRel))
+            .addFields(fields2FieldSpecs(entity.fields).asJava)
+            .addFields(oneToManyFieldSpecs(packageName, entity.oneToManyRel).asJava)
+            .addFields(manyToOneFieldSpecs(packageName, entity.manyToOneRel).asJava)
             .build
            
      JavaFile.builder(s"${packageName}.domain", entitySpec).build

@@ -9,13 +9,19 @@ import org.hibernate.mapping.{Table, Column, ForeignKey}
 import org.hibernate.cfg.reveng._
 import org.hibernate.cfg._
 import com.google.common.base.CaseFormat
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 /**
  * @author valadan
  */
 
-case class Field(name: String, tp: String, fieldIsNullable: Boolean, nameCapitalized: String, nameUnderscored: String)  
+case class Field(name: String, tp: String, fieldIsNullable: Boolean, nameCapitalized: String, nameUnderscored: String) {
+  override def toString: String = {
+    val required = if (fieldIsNullable) "" else "required"
+    val shortTp = tp.stripPrefix("java.lang.").stripPrefix("java.time.").stripPrefix("java.math.")
+    s" $name $shortTp $required"
+  }
+}
 
 object FieldMaker {
   
@@ -41,6 +47,8 @@ object FieldMaker {
         s"[L${classOf[JByte].getCanonicalName};"
       case Types.DECIMAL =>
         classOf[JBigDecimal].getCanonicalName
+      case Types.NUMERIC =>
+        classOf[JBigDecimal].getCanonicalName
       case Types.DOUBLE =>
         classOf[JDouble].getCanonicalName
       case Types.FLOAT =>
@@ -55,8 +63,14 @@ object FieldMaker {
         classOf[JByte].getCanonicalName
       case Types.VARCHAR =>
         classOf[String].getCanonicalName
+      case Types.NVARCHAR =>
+        classOf[String].getCanonicalName
       case Types.LONGVARCHAR =>
         classOf[String].getCanonicalName
+      case Types.LONGNVARCHAR =>
+        classOf[String].getCanonicalName
+      case Types.VARBINARY =>
+        s"[L${classOf[JByte].getCanonicalName};"
       case Types.LONGVARBINARY =>
         s"[L${classOf[JByte].getCanonicalName};"
       case Types.BIGINT =>
@@ -67,19 +81,28 @@ object FieldMaker {
   }  
 }
      
-case class Relationship(entityName: String, otherEntityName: String, mappedBy: String, joinColumn: String)
+case class Relationship(entityName: String, otherEntityName: String, mappedBy: String, joinColumn: String) {
+  override def toString: String = {
+    val lower = CaseFormat.UPPER_CAMEL.to(CaseFormat.LOWER_CAMEL, otherEntityName);
+    s"$entityName{$lower} to $otherEntityName"
+  }
+}
 
 object RelationshipMaker {
   import Naming._ 
   
   def apply(entity: String, fks: List[ForeignKey]): (String, List[Relationship]) = {
     val filteredFks = fks.filter { fk => fk.getReferencedEntityName.equals(entity)}
-    (entity, filteredFks.map ( fk => Relationship(entity, table2ClassName(fk.getTable), toLowerCamel(entity), fk.getColumns.asInstanceOf[JList[Column]].toList.head.getName)))
+    (entity, filteredFks.map ( fk => Relationship(entity, table2ClassName(fk.getTable), toLowerCamel(entity), fk.getColumns.asInstanceOf[JList[Column]].asScala.toList.head.getName)))
   } 
 
 }
   
-case class Entity(name: String, table: String, oneToManyRel: List[Relationship], manyToOneRel: List[Relationship], fields: List[Field], changelogdate: Long)
+case class Entity(name: String, table: String, oneToManyRel: List[Relationship], manyToOneRel: List[Relationship], fields: List[Field], changelogdate: Long) {
+  override def toString: String = {
+    s"entity $name {\n" + (fields mkString "\n") + "\n}\n"
+  }
+}
 
 object EntityMaker {
     import Naming._
@@ -88,7 +111,7 @@ object EntityMaker {
       val tableIdentifier = TableIdentifier.create(table)  
       val className = table2ClassName(tableIdentifier)
       val excludes = columnNameExcludes.getOrElse(className, Set.empty)
-      val columns = table.getColumnIterator.asInstanceOf[JIterator[Column]].toList.filter { col => !excludes.contains(col.getName) }
+      val columns = table.getColumnIterator.asInstanceOf[JIterator[Column]].asScala.toList.filter { col => !excludes.contains(col.getName) }
       
       val fields = columns map { case column => FieldMaker(table, column) } 
       
@@ -113,49 +136,40 @@ object Naming {
   }
 }
 
-object JHipsterGen extends App {
+object GenHelper {
 
-  import scalaz._, Scalaz._
-  import argonaut._, Argonaut._
   import EntityMaker._
   import Naming._ 
   
-  implicit def FieldCodecJson = casecodec5(Field.apply, Field.unapply)("fieldName", "fieldType", "fieldIsNullable", "fieldNameCapitalized", "fieldNameUnderscored") 
-  implicit def RelationshipCodecJson = casecodec4(Relationship.apply, Relationship.unapply)("entityName", "otherEntityName", "mappedBy", "joinColumn")    
-  implicit def EntityCodecJson = casecodec6(Entity.apply, Entity.unapply)("name", "table", "one-to-many", "many-to-one", "fields", "changelogdate")
-  
   type Relationships = List[Relationship]
   
-  val is = Thread.currentThread.getContextClassLoader.getResourceAsStream("database.properties")
-  val properties = new Properties
-  properties.load(is)
-  val cfg = new JDBCMetaDataConfiguration()
-  cfg.setProperties(properties)
-  val exporter = new DatabaseExporter(cfg)
-  val collector = exporter.export();
-  val tables = collector.iterateTables().asInstanceOf[JIterator[Table]].toList
-  val oneToManyCandidates = collector.getOneToManyCandidates().asInstanceOf[JMap[String, JList[ForeignKey]]].toMap.map { case (k,v) => (k, v.toList)}
+  implicit val collector: DatabaseCollector =  {
+    val is = Thread.currentThread.getContextClassLoader.getResourceAsStream("mssql.properties")
+    val properties = new Properties
+    properties.load(is)
+    val cfg = new JDBCMetaDataConfiguration()
+    cfg.setProperties(properties)
+    val exporter = new DatabaseExporter(cfg)
+    exporter.export(properties.getProperty("hibernate.default_schema"))
+  }
   
-  val oneToManyRelations: Map[String, Relationships] = oneToManyCandidates.map { 
-    case (entity, fks) => RelationshipMaker(entity, fks.toList) }
+  def listOneToManyCandidates(implicit collector : DatabaseCollector): Map[String, List[ForeignKey]] = {
+    collector.getOneToManyCandidates().asInstanceOf[JMap[String, JList[ForeignKey]]].asScala.toMap.map { case (k,v) => (k, v.asScala.toList)}
+  }
   
-  oneToManyRelations.map { case (entity, relationships) => println(s"one-to-many ${entity} -> \n\t${relationships}") }
+  def listOneToManyRelations: Map[String, Relationships] = listOneToManyCandidates(collector).map { 
+    case (entity, fks) => RelationshipMaker(entity, fks.toList) 
+  }
   
-  val relationships = oneToManyRelations.values.flatten
-  val manyToOneRelations: Map[String, Relationships] = relationships.groupBy(rel => rel.otherEntityName).mapValues { _.toList }
-  manyToOneRelations.map { case (entity, relationships) => println(s"many-to-one ${entity} -> \n\t${relationships}") }
-    
-  val columnNameExcludes = manyToOneRelations.map { case (entity, relationships) => (entity, relationships.map { rel => rel.joinColumn }.toSet) }
+  def listManyToOneRelations: Map[String, Relationships] = {
+    val relationships = listOneToManyRelations.values.flatten
+    relationships.groupBy(rel => rel.otherEntityName).mapValues { _.toList }
+  }
   
-  val entities = (tables map (table => EntityMaker(table, oneToManyRelations, manyToOneRelations, columnNameExcludes)))
-  
-//  println(entities.asJson.spaces2)
-//  println(entities.map(entity => EntityGen.generateEntity("io.valadan.flexpbx", entity)))
-//  println(entities.map(entity => RepositoryGen.generateRepository("io.valadan.flexpbx", entity))) 
-  println(entities.map(entity => EntityResourceGen.generateEntityResource("io.valadan.flexpbx", entity)))
-  
-
-  
-
+  def listEntities: List[Entity] = {
+    val columnNameExcludes = listManyToOneRelations.map { case (entity, relationships) => (entity, relationships.map { rel => rel.joinColumn }.toSet) }
+    val tables = collector.iterateTables().asInstanceOf[JIterator[Table]].asScala.toList
+    tables map (table => EntityMaker(table, listOneToManyRelations, listManyToOneRelations, columnNameExcludes))
+  }
 
 }

@@ -11,7 +11,7 @@
 	<artifactId>reverse-eng</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<properties>
-		<scala.version>2.10.5</scala.version>
+		<scala.version>2.12.3</scala.version>
 		<javax.inject.version>1</javax.inject.version>
 	</properties>
 	<dependencies>
@@ -137,11 +137,6 @@
 			<artifactId>slf4j-api</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>io.argonaut</groupId>
-			<artifactId>argonaut_2.10</artifactId>
-			<version>6.0.4</version>
-		</dependency>
-		<dependency>
 			<groupId>com.google.guava</groupId>
 			<artifactId>guava</artifactId>
 			<version>18.0</version>
@@ -161,6 +156,17 @@
 			<artifactId>compiler</artifactId>
 			<version>0.9.1</version>
 		</dependency>
+		<dependency>
+			<groupId>com.microsoft.sqlserver</groupId>
+			<artifactId>mssql-jdbc</artifactId>
+			<version>6.4.0.jre8</version>
+		</dependency>
+		<!-- dependency>
+			<groupId>mysql</groupId>
+			<artifactId>mysql-connector-java</artifactId>
+			<version>5.1.44</version>
+		</dependency-->
+
 	</dependencies>
 	<build>
 		<plugins>
